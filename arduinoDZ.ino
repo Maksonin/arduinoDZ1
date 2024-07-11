@@ -6,15 +6,10 @@
 
 #define peopleGoBtn 2
 
-#define strobDelay 500
-#define carGreenDelay 5000
-#define carYellowDelay 3000
-#define carRedDelay 5000
+#define checkTimeUpr (tmp < delay) && !uartUpr() && !uUpr
 
-char sost = 1;
-
-uint32_t timer = 0; // переменная таймера
-uint32_t setDelay = 0;
+int sost = 1;
+int uUpr = 0;
 
 // зеленый свет для авто
 void carRun(){
@@ -28,45 +23,38 @@ void carRun(){
 
   // все светофоры - красный свет
   uint32_t time = millis();
-  while((millis() - time) < 2000 ){
+  uint32_t tmp = 0;
+  uint16_t delay = 2000;
+  while( checkTimeUpr ){
+    tmp = millis() - time;
     digitalWrite(peopleGreenLed, LOW);
     digitalWrite(peopleRedLed, HIGH);
   }
 
   // желтый свет на автомобильном
   time = millis();
-  while((millis() - time) < 2000 ){
+  tmp = 0;
+  delay = 2000;
+  while( checkTimeUpr ){
+    tmp = millis() - time;
     digitalWrite(carYellowLed, HIGH);
   }
-  //delay(2000);
-
-  uint8_t buf[8] = {0};
 
   // включение зеленого на постоянное свечение, пешеходный красный
   time = millis();
-  uint16_t delay = 20000;
-  uint32_t tmp = 0;
-  while( tmp < delay ){ // свечение зеленым 20 секунд
+  tmp = 0;
+  delay = 20000;
+  while( checkTimeUpr ){ // свечение зеленым 20 секунд
     tmp = millis() - time;
 
     // Реация на прерывание по нажатию кнопки //
     /* Если произошло прерывание (sost == 0), то идёт проверка, что зеленый свет горит больше минимального времени (чтобы машины успели проехать после разрешения) 
     и меньше максимально-разумного времени (чтобы с учетом задержки не вышло за максимальный срок свечения зеленого) */
     if((sost == 0) && (tmp > 3000) && (tmp < 13000)) { 
-        Serial.write("END!!\n");
+        Serial.print("END!!\n");
         delay = tmp + 5000; // тогда задержка свечения выставляется как текущее время таймера + 5 секунд
         sost = 1; // 
     }
-
-    setIntToCharBuf(tmp, buf, 8);
-    printCharBuf(buf, 8);
-
-    Serial.write(" - ");
-
-    setIntToCharBuf(delay, buf, 5);
-    printCharBuf(buf, 5);
-    
-    Serial.write("\n");
 
     digitalWrite(carGreenLed, HIGH);
     digitalWrite(carYellowLed, LOW);
@@ -82,55 +70,43 @@ void carWait(){
     digitalWrite(carGreenLed, !digitalRead(carGreenLed));
     delay(500);
   }
-
-  digitalWrite(carGreenLed, LOW);
-  digitalWrite(carYellowLed, HIGH);
-  digitalWrite(carRedLed, LOW);
-  
-  digitalWrite(peopleGreenLed, LOW);
-  digitalWrite(peopleRedLed, HIGH);
+  uint32_t time = millis();
+  uint32_t tmp = 0;
+  uint16_t delay = 3000;
+  while( checkTimeUpr ){
+    tmp = millis() - time;
+    digitalWrite(carGreenLed, LOW);
+    digitalWrite(carYellowLed, HIGH);
+    digitalWrite(carRedLed, LOW);
+    
+    digitalWrite(peopleGreenLed, LOW);
+    digitalWrite(peopleRedLed, HIGH);
 	
-  delay(3000);
+  }
 }
 
 // красный свет для авто
 void carStop(){
   sost = 3;
-  digitalWrite(carGreenLed, LOW);
-  digitalWrite(carYellowLed, LOW);
-  digitalWrite(carRedLed, HIGH);
 
-  delay(2000);
-
-  digitalWrite(peopleGreenLed, HIGH);
-  digitalWrite(peopleRedLed, LOW);
-  delay(5000);
-}
-
-// перевод int в символьный вид с записью порязрядно в буфер buf
-void setIntToCharBuf(uint32_t num, uint8_t buf[], uint8_t len){
-  len -= 1;
-  
-  // очистка буфера
-  for(int i = 0; i < len; i++)
-    buf[i] = 0;
-
-  if(num == 0){ // если в функцию был передан 0
-    buf[len] = '0';
+  uint32_t time = millis();
+  uint32_t tmp = 0;
+  uint16_t delay = 2000;
+  while( checkTimeUpr ){
+    tmp = millis() - time;
+    digitalWrite(carGreenLed, LOW);
+    digitalWrite(carYellowLed, LOW);
+    digitalWrite(carRedLed, HIGH);
   }
-  else { // иначе производим перебор переданного числа с записью каждого разряда в элемент массива buf
-    while(num){
-      buf[len] = '0' + (num % 10);
-      num /= 10;
-      len--;
-    }
-  }
-}
 
-// вывод буфера buf в uart
-void printCharBuf(uint8_t buf[], uint8_t len){
-    for(int i = 0; i < len; i++)
-      Serial.write(buf[i]);
+  time = millis();
+  tmp = 0;
+  delay = 5000;
+  while( checkTimeUpr ){
+    tmp = millis() - time;
+    digitalWrite(peopleGreenLed, HIGH);
+    digitalWrite(peopleRedLed, LOW);
+  }
 }
 
 // настройка
@@ -143,26 +119,89 @@ void setup() {
   pinMode(7, OUTPUT);
   pinMode(2, INPUT_PULLUP);
   attachInterrupt(0, btnIsr, FALLING);
-  Serial.write("\n----------\n");
+  Serial.print("\n-----S-----\n");
 }
 
 // прерывание по нажатию кнопки
 void btnIsr() {
   if(sost == 1){ // если горит зеленый для машин
-    Serial.write("Int!");
+    Serial.println("Int!");
     sost = 0; // устанавливаем 
   }
 }
 
 // главный цикл
 void loop() {
-  // put your main code here, to run repeatedly:
-  carRun();
-  carWait();
-  carStop();
+  Serial.println("Автоматическое управление");
+  initLed();
+  while(!uUpr){ // цикл автоматического управления
+    carRun();
+    carWait();
+    carStop();
+  }
+  Serial.println("Ручное управление");
+  while(uUpr){ // цикл ручного 
+    uartUpr();
+    if (uUpr == 1){
+      initLed();
+    }
+    else if (uUpr == 2){
+      digitalWrite(carGreenLed, HIGH);
+      digitalWrite(carYellowLed, LOW);
+      digitalWrite(carRedLed, LOW);
+      digitalWrite(peopleGreenLed, LOW);
+      digitalWrite(peopleRedLed, HIGH);
+    }
+    else if (uUpr ==  3){
+      digitalWrite(carGreenLed, LOW);
+      digitalWrite(carYellowLed, LOW);
+      digitalWrite(carRedLed, HIGH);
+      digitalWrite(peopleGreenLed, HIGH);
+      digitalWrite(peopleRedLed, LOW);
+    }
+    else if (uUpr ==  4){
+      initLed();
+    }
+  }
 }
 
-void yield(){
-  if(Serial.available())
-    Serial.write(Serial.read());
+// функция включает начальное свечение светофора (все красные)
+void initLed(){
+    digitalWrite(carGreenLed, LOW);
+    digitalWrite(carYellowLed, LOW);
+    digitalWrite(carRedLed, HIGH);
+    digitalWrite(peopleGreenLed, LOW);
+    digitalWrite(peopleRedLed, HIGH);
+}
+
+// фукнция проверяет наличие сообщений в буфере UART и если определяет управляющие команды - меняет режимы
+int uartUpr(){
+  if(Serial.available()){
+    int val = Serial.parseInt();
+    Serial.print("UART - ");
+    Serial.print(val);
+    Serial.print(" UPR - ");
+    Serial.println(uUpr);
+
+    if((val < 1) || (val > 4)){ // если не найдено управляющих команд
+      Serial.println("Введите 1 для активации режима удаленного управления");
+      Serial.println("Введите 2 для активации зеленого света для авто");
+      Serial.println("Введите 3 для активации зеленого света для пешеходов");
+      Serial.println("Ввведите 4 для активации красного света для всех");
+      Serial.println("Для отключения режима удаленного управления нажмите 1");
+      return 0;
+    }
+    else if(val == 1){ // если передана 1 - включается/выключается режим автоматического управления
+      if(uUpr > 0) uUpr = 0;
+      else if (!uUpr) uUpr = 1;
+      Serial.print(uUpr);
+      Serial.println(" - Смена режима");
+    }
+    else if((uUpr > 0) && (val > 1) && (val < 5) ) { // если включен ручной режим управления и пришли цифры от 2 до 4, то считаем их командами
+      Serial.println("Сигнал управления");
+      uUpr = val;
+    }
+    return 1;
+  }
+  else return 0;
 }
